@@ -1,0 +1,237 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two's Complement Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #binary-number, #question {
+            font-size: 1.5em;
+            margin: 20px 0;
+        }
+        #answer {
+            padding: 10px;
+            font-size: 1em;
+            width: 100px;
+        }
+        #feedback, #hints {
+            color: green;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        #hints {
+            color: #333;
+            font-weight: normal;
+            display: none;
+            text-align: left;
+            line-height: 1.6;
+        }
+        #score {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>Two's Complement Game</h1>
+        <p>Convert the number to the requested format!</p>
+        <div id="score">Score: <span id="score-value">0</span></div>
+        <div id="question"></div>
+        <div id="binary-number"></div>
+        <input type="text" id="answer" placeholder="Enter your answer">
+        <br>
+        <button onclick="checkAnswer()">Submit</button>
+        <button onclick="nextQuestion()">Next Question</button>
+        <button onclick="showHints()">Hints</button>
+        <div id="feedback"></div>
+        <div id="hints"></div>
+    </div>
+
+    <script>
+        let score = 0;
+        let currentQuestion = {};
+        const bitLength = 8; // Using 8-bit two's complement
+
+        function generateQuestion() {
+            // Randomly decide if converting binary to decimal or decimal to binary
+            const isBinaryToDecimal = Math.random() > 0.5;
+            let number, binary, decimal;
+
+            if (isBinaryToDecimal) {
+                // Generate a random 8-bit binary number
+                binary = Array(bitLength).fill().map(() => Math.floor(Math.random() * 2)).join('');
+                decimal = binaryToDecimal(binary);
+                currentQuestion = {
+                    type: 'binaryToDecimal',
+                    binary: binary,
+                    answer: decimal
+                };
+                document.getElementById('question').textContent = 'Convert this binary number (in two\'s complement) to decimal:';
+                document.getElementById('binary-number').textContent = binary;
+            } else {
+                // Generate a random decimal number in the range of 8-bit two's complement (-128 to 127)
+                decimal = Math.floor(Math.random() * 256) - 128;
+                binary = decimalToBinary(decimal);
+                currentQuestion = {
+                    type: 'decimalToBinary',
+                    decimal: decimal,
+                    answer: binary
+                };
+                document.getElementById('question').textContent = 'Convert this decimal number to 8-bit two\'s complement binary:';
+                document.getElementById('binary-number').textContent = decimal;
+            }
+            document.getElementById('answer').value = '';
+            document.getElementById('feedback').textContent = '';
+            document.getElementById('hints').style.display = 'none';
+            document.getElementById('hints').textContent = '';
+        }
+
+        function binaryToDecimal(binary) {
+            // If the most significant bit is 1, it's a negative number
+            if (binary[0] === '1') {
+                // Invert bits and add 1 to get the positive equivalent
+                let inverted = binary.split('').map(bit => bit === '1' ? '0' : '1').join('');
+                let positive = parseInt(inverted, 2) + 1;
+                return -positive;
+            } else {
+                return parseInt(binary, 2);
+            }
+        }
+
+        function decimalToBinary(decimal) {
+            if (decimal >= 0) {
+                let binary = decimal.toString(2);
+                return binary.padStart(bitLength, '0').slice(-bitLength);
+            } else {
+                // For negative numbers: get positive binary, invert, add 1
+                let positive = Math.abs(decimal);
+                let binary = positive.toString(2).padStart(bitLength, '0').slice(-bitLength);
+                let inverted = binary.split('').map(bit => bit === '1' ? '0' : '1').join('');
+                let result = (parseInt(inverted, 2) + 1).toString(2);
+                return result.padStart(bitLength, '0').slice(-bitLength);
+            }
+        }
+
+        function checkAnswer() {
+            const userAnswer = document.getElementById('answer').value.trim();
+            const feedback = document.getElementById('feedback');
+            let correct = false;
+
+            if (currentQuestion.type === 'binaryToDecimal') {
+                correct = parseInt(userAnswer) === currentQuestion.answer;
+            } else {
+                correct = userAnswer === currentQuestion.answer;
+            }
+
+            if (correct) {
+                score += 10;
+                feedback.textContent = 'Correct! Well done!';
+                feedback.style.color = 'green';
+            } else {
+                feedback.textContent = `Incorrect. The correct answer is ${currentQuestion.answer}.`;
+                feedback.style.color = 'red';
+            }
+            document.getElementById('score-value').textContent = score;
+        }
+
+        function showHints() {
+            const hintsDiv = document.getElementById('hints');
+            hintsDiv.style.display = 'block';
+            if (currentQuestion.type === 'binaryToDecimal') {
+                hintsDiv.innerHTML = `
+                    Hints:<br>
+                    1. Check the most significant bit (leftmost). If it's 1, the number is negative.<br>
+                    2. For negative numbers: Invert all bits (0 to 1, 1 to 0), then add 1 to the result and convert to decimal. Make it negative.<br>
+                    3. For positive numbers: Convert directly from binary to decimal.<br>
+                    Example for ${currentQuestion.binary}:<br>
+                    - Most significant bit is ${currentQuestion.binary[0]}.<br>
+                    - ${currentQuestion.binary[0] === '1' ? `Invert ${currentQuestion.binary} to ${currentQuestion.binary.split('').map(bit => bit === '1' ? '0' : '1').join('')}, add 1, then make negative.` : `Convert ${currentQuestion.binary} directly to decimal.`}<br>
+                `;
+            } else {
+                hintsDiv.innerHTML = `
+                    Hints:<br>
+                    1. If the number is positive, convert it directly to binary and pad to 8 bits with leading zeros.<br>
+                    2. If the number is negative, take its absolute value, convert to binary, pad to 8 bits, invert all bits, then add 1.<br>
+                    Example for ${currentQuestion.decimal}:<br>
+                    - Number is ${currentQuestion.decimal < 0 ? 'negative' : 'positive'}.<br>
+                    - ${currentQuestion.decimal < 0 ? `Take absolute value (${Math.abs(currentQuestion.decimal)}), convert to binary, invert, add 1.` : `Convert ${currentQuestion.decimal} to binary and pad to 8 bits.`}<br>
+                `;
+            }
+        }
+
+        function nextQuestion() {
+            generateQuestion();
+        }
+
+        // Initialize the game
+        generateQuestion();
+    </script>
+</body>
+</html>
