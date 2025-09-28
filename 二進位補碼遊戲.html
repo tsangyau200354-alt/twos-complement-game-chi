@@ -1,0 +1,237 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二進位補碼遊戲</title>
+    <style>
+        body {
+            font-family: Arial, 'Noto Sans TC', sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #binary-number, #question {
+            font-size: 1.5em;
+            margin: 20px 0;
+        }
+        #answer {
+            padding: 10px;
+            font-size: 1em;
+            width: 100px;
+        }
+        #feedback, #hints {
+            color: green;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        #hints {
+            color: #333;
+            font-weight: normal;
+            display: none;
+            text-align: left;
+            line-height: 1.6;
+        }
+        #score {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>二進位補碼遊戲</h1>
+        <p>將數字轉換為要求的格式！</p>
+        <div id="score">得分: <span id="score-value">0</span></div>
+        <div id="question"></div>
+        <div id="binary-number"></div>
+        <input type="text" id="answer" placeholder="輸入答案">
+        <br>
+        <button onclick="checkAnswer()">提交</button>
+        <button onclick="nextQuestion()">下一題</button>
+        <button onclick="showHints()">提示</button>
+        <div id="feedback"></div>
+        <div id="hints"></div>
+    </div>
+
+    <script>
+        let score = 0;
+        let currentQuestion = {};
+        const bitLength = 8; // 使用8位二進位補碼
+
+        function generateQuestion() {
+            // 隨機決定是將二進位轉換為十進位還是十進位轉換為二進位
+            const isBinaryToDecimal = Math.random() > 0.5;
+            let number, binary, decimal;
+
+            if (isBinaryToDecimal) {
+                // 生成一個隨機的8位二進位數
+                binary = Array(bitLength).fill().map(() => Math.floor(Math.random() * 2)).join('');
+                decimal = binaryToDecimal(binary);
+                currentQuestion = {
+                    type: 'binaryToDecimal',
+                    binary: binary,
+                    answer: decimal
+                };
+                document.getElementById('question').textContent = '將此二進位數（以二進位補碼表示）轉換為十進位：';
+                document.getElementById('binary-number').textContent = binary;
+            } else {
+                // 生成一個在8位二進位補碼範圍內的隨機十進位數（-128 到 127）
+                decimal = Math.floor(Math.random() * 256) - 128;
+                binary = decimalToBinary(decimal);
+                currentQuestion = {
+                    type: 'decimalToBinary',
+                    decimal: decimal,
+                    answer: binary
+                };
+                document.getElementById('question').textContent = '將此十進位數轉換為8位二進位補碼：';
+                document.getElementById('binary-number').textContent = decimal;
+            }
+            document.getElementById('answer').value = '';
+            document.getElementById('feedback').textContent = '';
+            document.getElementById('hints').style.display = 'none';
+            document.getElementById('hints').textContent = '';
+        }
+
+        function binaryToDecimal(binary) {
+            // 如果最高有效位是1，則為負數
+            if (binary[0] === '1') {
+                // 反轉位並加1得到正數等價值
+                let inverted = binary.split('').map(bit => bit === '1' ? '0' : '1').join('');
+                let positive = parseInt(inverted, 2) + 1;
+                return -positive;
+            } else {
+                return parseInt(binary, 2);
+            }
+        }
+
+        function decimalToBinary(decimal) {
+            if (decimal >= 0) {
+                let binary = decimal.toString(2);
+                return binary.padStart(bitLength, '0').slice(-bitLength);
+            } else {
+                // 對於負數：獲取正數二進位，反轉位，加1
+                let positive = Math.abs(decimal);
+                let binary = positive.toString(2).padStart(bitLength, '0').slice(-bitLength);
+                let inverted = binary.split('').map(bit => bit === '1' ? '0' : '1').join('');
+                let result = (parseInt(inverted, 2) + 1).toString(2);
+                return result.padStart(bitLength, '0').slice(-bitLength);
+            }
+        }
+
+        function checkAnswer() {
+            const userAnswer = document.getElementById('answer').value.trim();
+            const feedback = document.getElementById('feedback');
+            let correct = false;
+
+            if (currentQuestion.type === 'binaryToDecimal') {
+                correct = parseInt(userAnswer) === currentQuestion.answer;
+            } else {
+                correct = userAnswer === currentQuestion.answer;
+            }
+
+            if (correct) {
+                score += 10;
+                feedback.textContent = '正確！幹得好！';
+                feedback.style.color = 'green';
+            } else {
+                feedback.textContent = `錯誤。正確答案是 ${currentQuestion.answer}。`;
+                feedback.style.color = 'red';
+            }
+            document.getElementById('score-value').textContent = score;
+        }
+
+        function showHints() {
+            const hintsDiv = document.getElementById('hints');
+            hintsDiv.style.display = 'block';
+            if (currentQuestion.type === 'binaryToDecimal') {
+                hintsDiv.innerHTML = `
+                    提示：<br>
+                    1. 檢查最高有效位（最左邊）。如果它是1，則數字是負數。<br>
+                    2. 對於負數：將所有位反轉（0變為1，1變為0），然後將結果加1並轉換為十進位。加上負號。<br>
+                    3. 對於正數：直接從二進位轉換為十進位。<br>
+                    示例（針對 ${currentQuestion.binary}）：<br>
+                    - 最高有效位是 ${currentQuestion.binary[0]}。<br>
+                    - ${currentQuestion.binary[0] === '1' ? `將 ${currentQuestion.binary} 反轉為 ${currentQuestion.binary.split('').map(bit => bit === '1' ? '0' : '1').join('')}，加1，然後加上負號。` : `直接將 ${currentQuestion.binary} 轉換為十進位。`}<br>
+                `;
+            } else {
+                hintsDiv.innerHTML = `
+                    提示：<br>
+                    1. 如果數字是正數，直接將其轉換為二進位，並用前導零填充到8位。<br>
+                    2. 如果數字是負數，取其絕對值，轉換為二進位，填充到8位，反轉所有位，然後加1。<br>
+                    示例（針對 ${currentQuestion.decimal}）：<br>
+                    - 數字是 ${currentQuestion.decimal < 0 ? '負數' : '正數'}。<br>
+                    - ${currentQuestion.decimal < 0 ? `取絕對值 (${Math.abs(currentQuestion.decimal)})，轉換為二進位，反轉，加1。` : `將 ${currentQuestion.decimal} 轉換為二進位並填充到8位。`}<br>
+                `;
+            }
+        }
+
+        function nextQuestion() {
+            generateQuestion();
+        }
+
+        // 初始化遊戲
+        generateQuestion();
+    </script>
+</body>
+</html>
