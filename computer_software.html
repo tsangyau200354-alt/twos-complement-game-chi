@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>軟件分類偵探遊戲</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f0f8ff; text-align: center; padding: 20px; }
+        h1 { color: #007bff; }
+        #game { max-width: 800px; margin: 0 auto; }
+        #results { max-width: 800px; margin: 0 auto; display: none; background: #d4edda; padding: 20px; border-radius: 8px; }
+        .category { border: 2px dashed #007bff; margin: 10px; padding: 10px; min-height: 60px; background: white; border-radius: 8px; }
+        .category.dragover { border-color: #28a745; background: #d4edda; }
+        .item { display: inline-block; background: #ffc107; margin: 5px; padding: 8px; border-radius: 5px; cursor: grab; user-select: none; }
+        .item:active { cursor: grabbing; }
+        #items { margin: 20px 0; }
+        #score { font-size: 24px; color: #28a745; }
+        #timer { font-size: 20px; color: #dc3545; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 10px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .feedback { font-weight: bold; margin: 10px; }
+        .correct { color: #28a745; }
+        .wrong { color: #dc3545; }
+        #final-score { font-size: 28px; color: #28a745; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <h1>🕵️‍♂️ 軟件分類偵探遊戲</h1>
+        <p>拖拽例子到正確類別！操作系統、實用程式、驅動程式、應用軟件。完成得高分！</p>
+        <div id="timer">時間：90 秒</div>
+        <div id="score">分數：0 / 25</div>
+        <div id="feedback" class="feedback"></div>
+        
+        <div id="categories">
+            <div class="category" data-type="os">操作系統<br>如 Windows</div>
+            <div class="category" data-type="utility">實用程式<br>如防毒</div>
+            <div class="category" data-type="driver">驅動程式<br>如印表機</div>
+            <div class="category" data-type="app">應用軟件<br>如瀏覽器</div>
+        </div>
+        
+        <div id="items">
+            <!-- 例子會用 JS 動態產生 -->
+        </div>
+        
+        <button id="startBtn" onclick="startGame()">開始遊戲</button>
+        <button id="resetBtn" onclick="resetGame()" disabled>重玩</button>
+    </div>
+
+    <div id="results">
+        <h1>🎉 遊戲結果</h1>
+        <p>記住，操作系統統籌一切，實用程式與驅動程式是幕後英雄，應用軟件帶來樂趣！</p>
+        <div id="final-score">正確數：0 / 25</div>
+        <button onclick="backToGame()">返回遊戲</button>
+    </div>
+
+    <script>
+        const categories = ['os', 'utility', 'driver', 'app'];
+        const itemsData = [
+            // 操作系統 (4 個)
+            { text: 'Windows 11', type: 'os' },
+            { text: 'macOS', type: 'os' },
+            { text: 'Linux', type: 'os' },
+            { text: 'Android', type: 'os' },
+            // 實用程式 (8 個，原 5 + 新增 3：系統還原、備份工具、防火牆)
+            { text: '檔案管理員', type: 'utility' },
+            { text: 'ZIP 壓縮工具', type: 'utility' },
+            { text: '防毒軟件', type: 'utility' },
+            { text: '磁碟清理', type: 'utility' },
+            { text: '記憶體管理', type: 'utility' },
+            { text: '系統還原', type: 'utility' },
+            { text: '備份工具', type: 'utility' },
+            { text: '防火牆', type: 'utility' },
+            // 應用軟件 (8 個，原 5 + 新增 3：PowerPoint、Notepad++、Zoom)
+            { text: 'Google Chrome', type: 'app' },
+            { text: 'Microsoft Word', type: 'app' },
+            { text: 'Photoshop', type: 'app' },
+            { text: '遊戲如 Minecraft', type: 'app' },
+            { text: 'Excel 試算表', type: 'app' },
+            { text: 'PowerPoint', type: 'app' },
+            { text: 'Notepad++', type: 'app' },
+            { text: 'Zoom', type: 'app' },
+            // 驅動程式 (5 個)
+            { text: '顯示卡驅動', type: 'driver' },
+            { text: '印表機驅動', type: 'driver' },
+            { text: '音效卡驅動', type: 'driver' },
+            { text: 'USB 驅動', type: 'driver' },
+            { text: '網路卡驅動', type: 'driver' }
+        ];
+
+        let score = 0;
+        let timeLeft = 90;
+        let gameActive = false;
+        let timerId;
+        let draggedItem = null;
+        const totalItems = itemsData.length; // 25
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function startGame() {
+            if (gameActive) return;
+            gameActive = true;
+            score = 0;
+            timeLeft = 90;
+            updateScore();
+            updateTimer();
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('resetBtn').disabled = false;
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            timerId = setInterval(() => {
+                timeLeft--;
+                updateTimer();
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+            const shuffledItems = shuffle([...itemsData]);
+            const itemsDiv = document.getElementById('items');
+            itemsDiv.innerHTML = shuffledItems.map(item => 
+                `<div class="item" draggable="true" data-type="${item.type}">${item.text}</div>`
+            ).join('');
+            document.getElementById('feedback').innerHTML = '';
+            addDragListeners();
+        }
+
+        function resetGame() {
+            clearInterval(timerId);
+            gameActive = false;
+            document.getElementById('items').innerHTML = '';
+            categories.forEach(cat => {
+                document.querySelector(`[data-type="${cat}"]`).innerHTML = 
+                    categoriesData[cat].label + '<br><small>拖拽這裡</small>';
+            });
+            updateScore();
+            updateTimer();
+            document.getElementById('feedback').innerHTML = '';
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('resetBtn').disabled = true;
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+        }
+
+        function backToGame() {
+            resetGame();
+        }
+
+        function endGame() {
+            clearInterval(timerId);
+            gameActive = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('resetBtn').disabled = false;
+            // 禁用拖拽以停止遊戲
+            const items = document.querySelectorAll('.item');
+            items.forEach(item => {
+                item.draggable = false;
+            });
+            const cats = document.querySelectorAll('.category');
+            cats.forEach(cat => {
+                cat.style.pointerEvents = 'none';
+            });
+            // 切換到結果頁面
+            document.getElementById('game').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('final-score').textContent = `正確數：${score} / ${totalItems}`;
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = `分數：${score} / ${totalItems}`;
+        }
+
+        function updateTimer() {
+            document.getElementById('timer').textContent = `時間：${timeLeft} 秒`;
+        }
+
+        const categoriesData = {
+            os: { label: '操作系統' },
+            utility: { label: '實用程式' },
+            driver: { label: '驅動程式' },
+            app: { label: '應用軟件' }
+        };
+
+        function addDragListeners() {
+            const items = document.querySelectorAll('.item');
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    if (!gameActive) return;
+                    draggedItem = item;
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+            });
+
+            const cats = document.querySelectorAll('.category');
+            cats.forEach(cat => {
+                cat.addEventListener('dragover', (e) => {
+                    if (!gameActive) return;
+                    e.preventDefault();
+                    cat.classList.add('dragover');
+                    e.dataTransfer.dropEffect = 'move';
+                });
+                cat.addEventListener('dragleave', () => cat.classList.remove('dragover'));
+                cat.addEventListener('drop', (e) => {
+                    if (!gameActive) return;
+                    e.preventDefault();
+                    cat.classList.remove('dragover');
+                    if (draggedItem && draggedItem.parentNode) {
+                        const itemType = draggedItem.dataset.type;
+                        const catType = cat.dataset.type;
+                        if (itemType === catType) {
+                            cat.appendChild(draggedItem);
+                            score++;
+                            updateScore();
+                            document.getElementById('feedback').innerHTML = '<span class="correct">✅ 正確！+1 分</span>';
+                        } else {
+                            document.getElementById('feedback').innerHTML = '<span class="wrong">❌ 錯了！試試其他類別</span>';
+                        }
+                        if (document.querySelectorAll('#items .item').length === 0) {
+                            setTimeout(endGame, 1000);
+                        }
+                    }
+                });
+            });
+        }
+
+        // 初始化類別標籤
+        document.addEventListener('DOMContentLoaded', () => {
+            categories.forEach(cat => {
+                document.querySelector(`[data-type="${cat}"]`).innerHTML = 
+                    categoriesData[cat].label + '<br><small>拖拽這裡</small>';
+            });
+        });
+    </script>
+</body>
+</html>
